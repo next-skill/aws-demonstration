@@ -1,0 +1,128 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+  NamePrefix:
+    Type: String
+
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+      InstanceTenancy: default
+      Tags:
+      - Key: Name
+        Value: !Join
+        - ''
+        - - !Ref NamePrefix
+          - '-vpc'
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Join
+        - ''
+        - - !Ref NamePrefix
+          - '-public-route-table'
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: "ap-northeast-1a"
+      Tags:
+      - Key: Name
+        Value: !Join
+        - ''
+        - - !Ref NamePrefix
+          - '-public-subnet'
+  PubSubnetARouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  InternetGateway:
+    Type: "AWS::EC2::InternetGateway"
+    Properties:
+      Tags:
+      - Key: Name
+        Value: !Join
+        - ''
+        - - !Ref NamePrefix
+          - '-igw'
+  AttachGateway:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+  InternetGatewayRoute:
+    Type: AWS::EC2::Route
+    DependsOn: InternetGateway
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  EC2SecurityGroup:
+    Type: "AWS::EC2::SecurityGroup"
+    Properties:
+      GroupDescription: EC2 Security Group
+      VpcId: !Ref VPC
+      Tags:
+      - Key: Name
+        Value: !Join
+        - ''
+        - - !Ref NamePrefix
+          - '-sg'
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: '22'
+        ToPort: '22'
+        CidrIp: 0.0.0.0/0
+      - IpProtocol: tcp
+        FromPort: '80'
+        ToPort: '80'
+        CidrIp: 0.0.0.0/0
+
+  EC2Instance:
+    Type: 'AWS::EC2::Instance'
+    Properties:
+      BlockDeviceMappings:
+        - DeviceName: '/dev/xvda'
+          Ebs:
+            VolumeType: 'gp2'
+            VolumeSize: 10
+      ImageId: 'ami-0d7ed3ddb85b521a6'
+      InstanceInitiatedShutdownBehavior: 'stop'
+      InstanceType: 't2.micro'
+      KeyName: 'my-key'
+      Monitoring: false
+      Tenancy: 'default'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          sudo amazon-linux-extras install -y nginx1
+          sudo systemctl start nginx
+      Tags:
+      - Key: Name
+        Value: !Join
+        - ''
+        - - !Ref NamePrefix
+          - '-ec2'
+      NetworkInterfaces:
+      - AssociatePublicIpAddress: true
+        DeviceIndex: 0
+        SubnetId: !Ref PublicSubnet
+        GroupSet:
+        - !GetAtt EC2SecurityGroup.GroupId
+
+Outputs:
+  EC2PublicIP:
+    Value: !GetAtt EC2Instance.PublicIp
