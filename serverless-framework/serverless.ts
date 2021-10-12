@@ -19,6 +19,7 @@ const serverlessConfiguration: AWS = {
   plugins: ['serverless-esbuild'],
   provider: {
     name: 'aws',
+    region: 'ap-northeast-1',
     runtime: 'nodejs14.x',
     apiGateway: {
       minimumCompressionSize: 1024,
